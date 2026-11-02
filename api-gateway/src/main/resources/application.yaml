@@ -1,0 +1,76 @@
+server:
+  port: 8080
+
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+
+spring:
+  config:
+    import: optional:file:../.env[.properties],optional:file:.env[.properties]
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      connect-timeout: 1s
+      timeout: 1s
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      server:
+        webmvc:
+          routes:
+            # User & Auth Service
+            - id: user-services-auth
+              uri: lb://user-services
+              predicates:
+                - Path=/api/auth/**
+            - id: user-services-users
+              uri: lb://user-services
+              predicates:
+                - Path=/api/users/**
+            - id: user-services-admin
+              uri: lb://user-services
+              predicates:
+                - Path=/api/admin/**
+
+            # Catalog Service
+            - id: catalog-service
+              uri: lb://catalog-service
+              predicates:
+                - Path=/api/catalog/**
+
+            # Inventory Service
+            - id: inventory-service
+              uri: lb://inventory-service
+              predicates:
+                - Path=/api/inventory/**
+
+            # Order & Payment Service
+            - id: order-service-orders
+              uri: lb://order-service
+              predicates:
+                - Path=/api/orders/**
+            - id: order-service-cart
+              uri: lb://order-service
+              predicates:
+                - Path=/api/cart/**
+            - id: order-service-payments
+              uri: lb://order-service
+              predicates:
+                - Path=/api/payments/**
+
+            - id: order-service-statistics
+              uri: lb://order-service
+              predicates:
+                - Path=/api/stats/**
+
+            # AI Service
+            - id: ai-service
+              uri: lb://ai-service
+              predicates:
+                - Path=/api/ai/**

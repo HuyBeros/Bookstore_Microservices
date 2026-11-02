@@ -1,0 +1,21 @@
+.home-shelf-arrow { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--color-border); border-radius: 50%; color: var(--color-primary); transition: background 160ms, opacity 160ms; }
+.home-shelf-arrow:hover:not(:disabled) { background: var(--color-primary-light); }
+.home-shelf-arrow:disabled { opacity: .3; cursor: not-allowed; }
+.home-book-carousel { display: flex; gap: 24px; overflow-x: auto; padding: 4px 0 16px; scroll-snap-type: x mandatory; scrollbar-width: thin; scrollbar-color: #d8c8bc transparent; overscroll-behavior-x: contain; }
+.home-carousel-item { width: clamp(12rem, 22vw, 16rem); flex-shrink: 0; scroll-snap-align: start; }
+.home-shelf-edge { position: absolute; right: 0; top: 0; bottom: 16px; width: 12px; pointer-events: none; background: linear-gradient(to left, white, transparent); }
+.home-sales-empty { display: flex; flex-wrap: wrap; align-items: center; gap: 24px; padding: 28px; border: 1px solid var(--color-border); border-radius: 16px; background: #faf8f4; color: var(--color-primary); }
+.home-sales-empty > div { flex: 1; min-width: min(100%, 230px); }
+.home-author { min-width: 0; border: 1px solid #eae3da; border-radius: 18px; background: white; overflow: hidden; transition: border-color 180ms, transform 180ms; }
+.home-author:hover { border-color: #d2b29b; transform: translateY(-3px); }
+.home-author-link { display: block; height: 100%; padding: 26px 22px 20px; }
+.home-author-portrait { display: grid; place-items: center; width: 148px; height: 148px; max-width: 100%; aspect-ratio: 1; margin: 0 auto; overflow: hidden; border-radius: 50%; background: #eee5d6; color: var(--color-primary); outline: 1px solid #e9dfd2; outline-offset: 7px; }
+.home-author-portrait img { display: block; height: 100%; width: 100%; object-fit: cover; }
+.home-author-arrow { display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--color-border); border-radius: 50%; color: var(--color-primary); }
+.home-author-link:hover .home-author-arrow { background: var(--color-primary-light); }
+.home-photo-credits { margin-top: 22px; max-width: 50rem; font-size: 10px; line-height: 1.9; color: var(--color-ink-muted); }
+.home-photo-credits summary { cursor: pointer; width: fit-content; min-height: 32px; }
+.home-photo-credits li { margin: 5px 0; }
+.home-photo-credits a { text-decoration: underline; }
+@media (max-width: 480px) { .home-carousel-item { width: 66vw; } }
+@media (prefers-reduced-motion: reduce) { .home-author, .home-shelf-arrow { transition: none; } }

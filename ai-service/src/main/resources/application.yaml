@@ -1,0 +1,71 @@
+server:
+  port: ${PORT:8085}
+  error:
+    include-message: never
+    include-stacktrace: never
+spring:
+  config:
+    import: optional:file:../.env[.properties],optional:file:.env[.properties]
+  application:
+    name: ai-service
+  threads:
+    virtual:
+      enabled: true
+  mvc:
+    async:
+      request-timeout: 40s
+  datasource:
+    url: ${AI_DB_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/ai_db}
+    username: ${AI_DB_USER:${DB_USERNAME:postgres}}
+    password: ${AI_DB_PASSWORD:${DB_PASSWORD}}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+eureka:
+  client:
+    enabled: ${EUREKA_ENABLED:true}
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+security:
+  jwt:
+    issuer: ${JWT_ISSUER:http://localhost:8081}
+    secret: ${JWT_SECRET}
+    audience: ${JWT_AUDIENCE:bookstore}
+catalog:
+  base-url: ${CATALOG_URL:http://localhost:8082}
+inventory:
+  base-url: ${INVENTORY_URL:http://localhost:8084}
+ai:
+  rag:
+    enabled: ${AI_RAG_ENABLED:true}
+    embedding-model: ${AI_EMBEDDING_MODEL:gemini-embedding-001}
+    dimensions: ${AI_EMBEDDING_DIMENSION:768}
+    jdbc-url: ${AI_VECTOR_DB_URL:jdbc:postgresql://localhost:5433/bookstore_vectors?connectTimeout=2&socketTimeout=5}
+    username: ${AI_VECTOR_DB_USER:${DB_USERNAME:postgres}}
+    password: ${AI_VECTOR_DB_PASSWORD:${DB_PASSWORD:}}
+    interval-ms: ${AI_INDEX_INTERVAL_MS:600000}
+    initial-delay-ms: 15000
+  gemini:
+    base-url: https://generativelanguage.googleapis.com
+    api-key: ${GEMINI_API_KEY:}
+    model: ${GEMINI_MODEL:}
+    timeout-seconds: 15
+
+app:
+  docs:
+    enabled: ${SWAGGER_ENABLED:true}
+springdoc:
+  api-docs:
+    enabled: ${app.docs.enabled}
+  swagger-ui:
+    enabled: ${app.docs.enabled}
+    persist-authorization: false
+  paths-to-match: /api/ai/**

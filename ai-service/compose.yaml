@@ -1,0 +1,51 @@
+name: bookstore-ai
+
+services:
+  ai-service:
+    build:
+      context: .
+    image: bookstore/ai-service:local
+    env_file:
+      - .env
+    environment:
+      SERVER_PORT: "8085"
+      EUREKA_INSTANCE_HOSTNAME: ai-service
+    ports:
+      - "127.0.0.1:${HOST_PORT:-8085}:8085"
+    depends_on:
+      ai-db:
+        condition: service_healthy
+    networks:
+      - ai-data
+      - bookstore
+    restart: unless-stopped
+
+  ai-db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: ai_db
+      POSTGRES_USER: ${AI_DB_USER:-ai}
+      POSTGRES_PASSWORD: ${AI_DB_PASSWORD:?Dien AI_DB_PASSWORD trong .env}
+    volumes:
+      - ai-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - ai-data
+    restart: unless-stopped
+
+volumes:
+  ai-data:
+
+networks:
+  ai-data:
+    internal: true
+
+  bookstore:
+    external: true
+    name: bookstore-network

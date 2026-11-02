@@ -1,0 +1,43 @@
+# Local credentials and generated output
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+**/target/
+**/node_modules/
+**/dist/
+**/.cache/
+**/logs/
+*.log
+*.pid
+**/coverage/
+**/__pycache__/
+*.py[cod]
+
+# Local IDE and assistant installations; retain project instructions.
+**/.idea/
+*.iml
+*.iws
+*.ipr
+**/.agents/skills/
+**/.codex/
+
+# Local overrides, backups and OS files
+*.env
+*.local
+**/application-local.properties
+**/application-local.yml
+**/application-local.yaml
+*.bak
+*.tmp
+*.orig
+*.rej
+*.hprof
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Generated metadata audit reports (default output goes in .cache/)
+/report.csv

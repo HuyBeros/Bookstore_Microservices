@@ -1,0 +1,51 @@
+name: bookstore-catalog
+
+services:
+  catalog-service:
+    build:
+      context: .
+    image: bookstore/catalog-service:local
+    env_file:
+      - .env
+    environment:
+      SERVER_PORT: "8082"
+      EUREKA_INSTANCE_HOSTNAME: catalog-service
+    ports:
+      - "127.0.0.1:${HOST_PORT:-8082}:8082"
+    depends_on:
+      catalog-db:
+        condition: service_healthy
+    networks:
+      - catalog-data
+      - bookstore
+    restart: unless-stopped
+
+  catalog-db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: BookDB
+      POSTGRES_USER: ${CATALOG_DB_USER}
+      POSTGRES_PASSWORD: ${CATALOG_DB_PASSWORD}
+    volumes:
+      - catalog-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - catalog-data
+    restart: unless-stopped
+
+volumes:
+  catalog-data:
+
+networks:
+  catalog-data:
+    internal: true
+
+  bookstore:
+    external: true
+    name: bookstore-network

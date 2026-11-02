@@ -1,0 +1,33 @@
+{
+  "description": "Ánh xạ đề xuất cho audit; không tự ghi vào database. Các danh mục quảng bá không được coi là thể loại.",
+  "ambiguous_authors": ["michiel liisa", "nguyễn thiị hoàng"],
+  "collections": {
+    "van-hoc-hien-dai": "Văn học & Tiểu thuyết",
+    "van-hoc-kinh-dien": "Văn học & Tiểu thuyết",
+    "lang-man": "Văn học & Tiểu thuyết",
+    "ky-ao": "Văn học & Tiểu thuyết",
+    "trinh-tham-kinh-di": "Văn học & Tiểu thuyết",
+    "vien-tuong": "Văn học & Tiểu thuyết",
+    "phieu-luu-ly-ky": "Văn học & Tiểu thuyết",
+    "tan-van": "Văn học & Tiểu thuyết",
+    "tho-kich": "Văn học & Tiểu thuyết",
+    "light-novel": "Văn học & Tiểu thuyết",
+    "lich-su": "Thiếu nhi & Tuổi mới lớn",
+    "0-5-tuoi": "Thiếu nhi & Tuổi mới lớn",
+    "6-8-tuoi": "Thiếu nhi & Tuổi mới lớn",
+    "9-12-tuoi": "Thiếu nhi & Tuổi mới lớn",
+    "13-15-tuoi": "Thiếu nhi & Tuổi mới lớn",
+    "triet-hoc": "Triết học & Tư tưởng",
+    "lich-su-1": "Lịch sử & Địa lý",
+    "khoa-hoc": "Khoa học & Vũ trụ",
+    "kinh-doanh": "Kinh tế & Quản trị kinh doanh",
+    "kinh-te-chinh-tri": "Kinh tế & Quản trị kinh doanh",
+    "ky-nang": "Tâm lý & Kỹ năng sống",
+    "phat-trien-ban-than": "Tâm lý & Kỹ năng sống",
+    "tam-ly-hoc": "Tâm lý & Kỹ năng sống",
+    "nghe-thuat": "Nghệ thuật & Thiết kế",
+    "y-hoc-suc-khoe": "Y học & Sức khỏe",
+    "nuoi-day-con": "Giáo dục & Ngoại ngữ",
+    "phong-cach-song": "Văn hóa & Xã hội"
+  }
+}
