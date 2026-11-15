@@ -103,6 +103,7 @@ export const ENDPOINTS = {
     EXPORT: '/stats/export',
   },
   AI: {
+    ADMIN_BRIEFING: '/ai/admin/briefing',
     CHAT: '/ai/chat',
     SUGGEST_BOOKS: '/ai/recommendations',
     INTERACTIONS: '/ai/interactions',

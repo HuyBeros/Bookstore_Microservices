@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Button,
   DataTable,
@@ -27,10 +27,14 @@ const UserManagePage = () => {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
-  const [roleModalOpen, setRoleModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [newRole, setNewRole] = useState('');
   const [updatingId, setUpdatingId] = useState(null);
+  const isCurrentUser = (targetUser) => Boolean(currentUser) && (
+    String(targetUser.id) === String(currentUser.id ?? currentUser.user_id) ||
+    targetUser.username === currentUser.username
+  );
+  const savingRole = selectedUser !== null && updatingId === selectedUser.id;
 
   // Fetch users
   useEffect(() => {
@@ -57,15 +61,16 @@ const UserManagePage = () => {
     return () => clearTimeout(timer);
   }, [searchTerm, roleFilter]);
 
-  const handleChangeRole = async () => {
-    if (!selectedUser || !newRole) return;
+  const closeRoleModal = () => {
+    setSelectedUser(null);
+    setNewRole('');
+  };
 
-    // Prevent self-demotion
-    const isSelf =
-      String(selectedUser.id) === String(currentUser?.id || currentUser?.user_id) ||
-      selectedUser.username === currentUser?.username;
+  const handleChangeRole = async (event) => {
+    event.preventDefault();
+    if (!selectedUser || !newRole || newRole === selectedUser.role || updatingId !== null) return;
 
-    if (isSelf && newRole !== 'ADMIN') {
+    if (isCurrentUser(selectedUser)) {
       showToast('error', 'Bạn không thể tự hạ quyền tài khoản của chính mình');
       return;
     }
@@ -73,11 +78,11 @@ const UserManagePage = () => {
     try {
       setUpdatingId(selectedUser.id);
       await userApi.updateUserRole(selectedUser.id, newRole);
-      setUsers(
-        users.map((u) => (u.id === selectedUser.id ? { ...u, role: newRole } : u))
-      );
+      setUsers(previous => (roleFilter === 'all' || roleFilter === newRole)
+        ? previous.map(u => u.id === selectedUser.id ? { ...u, role: newRole } : u)
+        : previous.filter(u => u.id !== selectedUser.id));
       showToast('success', `Đã cập nhật vai trò của ${selectedUser.username} thành ${newRole}`);
-      setRoleModalOpen(false);
+      closeRoleModal();
     } catch (err) {
       showToast('error', err.message || 'Không thể cập nhật vai trò');
     } finally {
@@ -86,11 +91,9 @@ const UserManagePage = () => {
   };
 
   const handleToggleLock = async (targetUser) => {
-    const isSelf =
-      String(targetUser.id) === String(currentUser?.id || currentUser?.user_id) ||
-      targetUser.username === currentUser?.username;
+    if (updatingId !== null) return;
 
-    if (isSelf) {
+    if (isCurrentUser(targetUser)) {
       showToast('error', 'Quy tắc an toàn: Quản trị viên không được tự khóa tài khoản của mình');
       return;
     }
@@ -100,9 +103,7 @@ const UserManagePage = () => {
       const newStatus = targetUser.status === 'ACTIVE' ? 'LOCKED' : 'ACTIVE';
 
       await userApi.updateUserStatus(targetUser.id, newStatus);
-      setUsers(
-        users.map((u) => (u.id === targetUser.id ? { ...u, status: newStatus } : u))
-      );
+      setUsers(previous => previous.map(u => u.id === targetUser.id ? { ...u, status: newStatus } : u));
       showToast(
         'success',
         newStatus === 'LOCKED'
@@ -158,9 +159,7 @@ const UserManagePage = () => {
       header: 'Thao tác',
       accessor: 'id',
       render: (row) => {
-        const isSelf =
-          String(row.id) === String(currentUser?.id || currentUser?.user_id) ||
-          row.username === currentUser?.username;
+        const isSelf = isCurrentUser(row);
 
         return (
           <div className="flex items-center gap-2">
@@ -170,9 +169,8 @@ const UserManagePage = () => {
               onClick={() => {
                 setSelectedUser(row);
                 setNewRole(row.role);
-                setRoleModalOpen(true);
               }}
-              disabled={updatingId === row.id}
+              disabled={isSelf || updatingId !== null}
             >
               Đổi vai trò
             </Button>
@@ -180,7 +178,7 @@ const UserManagePage = () => {
             {isSelf ? (
               <span
                 className="text-caption text-ink-muted italic px-2 py-1 bg-surface-muted rounded-button border border-border"
-                title="Quy tắc an toàn: Không thể tự khóa tài khoản đang đăng nhập"
+                title="Bạn không thể tự đổi vai trò hoặc khóa tài khoản đang đăng nhập"
               >
                 Đang đăng nhập
               </span>
@@ -189,7 +187,8 @@ const UserManagePage = () => {
                 variant={row.status === 'ACTIVE' ? 'secondary' : 'primary'}
                 size="sm"
                 onClick={() => handleToggleLock(row)}
-                loading={updatingId === row.id}
+                disabled={updatingId !== null}
+                loading={!selectedUser && updatingId === row.id}
                 className={row.status === 'ACTIVE' ? 'text-danger hover:bg-danger-soft' : ''}
               >
                 {row.status === 'ACTIVE' ? 'Khóa' : 'Mở khóa'}
@@ -241,15 +240,14 @@ const UserManagePage = () => {
       )}
 
       {/* Role Change Modal */}
-      {roleModalOpen && selectedUser && (
+      {selectedUser && (
         <Modal
+          isOpen
           title={`Phân quyền: ${selectedUser.full_name || selectedUser.username}`}
-          onClose={() => {
-            setRoleModalOpen(false);
-            setSelectedUser(null);
-          }}
+          onClose={savingRole ? undefined : closeRoleModal}
+          closeButton={!savingRole}
         >
-          <div className="space-y-4">
+          <form className="space-y-4" onSubmit={handleChangeRole}>
             <p className="text-body-sm text-ink-muted">
               Chọn vai trò phân quyền cho tài khoản <strong className="text-ink">@{selectedUser.username}</strong>
             </p>
@@ -260,29 +258,32 @@ const UserManagePage = () => {
                 { value: 'STAFF', label: 'Nhân viên (STAFF) - Quản lý sách, kho hàng và đơn hàng' },
                 { value: 'CUSTOMER', label: 'Khách hàng (CUSTOMER) - Mua sắm và đọc sách' },
               ]}
+              aria-label="Vai trò mới"
               value={newRole}
               onChange={(e) => setNewRole(e.target.value)}
+              disabled={savingRole}
+              required
+              autoFocus
             />
 
             <div className="flex justify-end gap-3 pt-3">
               <Button
                 variant="secondary"
-                onClick={() => {
-                  setRoleModalOpen(false);
-                  setSelectedUser(null);
-                }}
+                onClick={closeRoleModal}
+                disabled={savingRole}
               >
                 Hủy
               </Button>
               <Button
+                type="submit"
                 variant="primary"
-                onClick={handleChangeRole}
-                loading={updatingId === selectedUser.id}
+                disabled={!newRole || newRole === selectedUser.role}
+                loading={savingRole}
               >
                 Lưu thay đổi
               </Button>
             </div>
-          </div>
+          </form>
         </Modal>
       )}
     </div>

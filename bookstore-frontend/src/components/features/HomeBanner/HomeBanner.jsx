@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, BookOpen, MessageCircle, RotateCcw, ShieldCheck, Truck } from 'lucide-react';
+import { ArrowRight, BookOpen, RotateCcw, ShieldCheck, Truck } from 'lucide-react';
 import { SPOTLIGHT } from '../../../data/homeEditorial';
 import { authorLabel } from '../../../utils/homeBooks';
 import { openBookChat } from '../../../utils/chatEvents';
+import ChatIcon from '../ChatWidget/ChatIcon';
 import './HomeBanner.css';
 
 const money = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' });
@@ -29,7 +30,7 @@ export default function HomeBanner({ book, topics }) {
         <div className="home-banner-actions">
           <Link to="/books" className="home-banner-explore">Khám phá sách <ArrowRight size={17} aria-hidden="true" /></Link>
           <button type="button" className="home-banner-ai" aria-haspopup="dialog" aria-controls="book-chat-panel" onClick={event => openBookChat(event.currentTarget)}>
-            <MessageCircle size={17} aria-hidden="true" /><span>Hỏi AI chọn sách giúp bạn</span>
+            <ChatIcon name="chat" size={18} /><span>Hỏi AI chọn sách giúp bạn</span>
           </button>
         </div>
         {topics.length > 0 && <nav className="home-banner-topics" aria-label="Duyệt sách theo chủ đề">
@@ -66,7 +67,7 @@ export default function HomeBanner({ book, topics }) {
         </li>)}
         <li>
           <button type="button" className="home-assurance-ai" aria-label="AI tư vấn sách, mở chatbot" aria-haspopup="dialog" aria-controls="book-chat-panel" onClick={event => openBookChat(event.currentTarget)}>
-            <span className="home-assurance-icon"><MessageCircle size={29} strokeWidth={1.5} aria-hidden="true" /></span>
+            <span className="home-assurance-icon"><ChatIcon name="chat" size={29} /></span>
             <span className="home-assurance-copy"><strong>AI tư vấn sách</strong><span className="home-assurance-detail">Gợi ý theo sở thích của bạn</span></span>
             <ArrowRight size={17} className="home-assurance-arrow" aria-hidden="true" />
           </button>

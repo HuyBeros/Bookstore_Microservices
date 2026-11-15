@@ -43,6 +43,8 @@ catalog:
   base-url: ${CATALOG_URL:http://localhost:8082}
 inventory:
   base-url: ${INVENTORY_URL:http://localhost:8084}
+order:
+  base-url: ${ORDER_URL:http://localhost:8083}
 ai:
   rag:
     enabled: ${AI_RAG_ENABLED:true}

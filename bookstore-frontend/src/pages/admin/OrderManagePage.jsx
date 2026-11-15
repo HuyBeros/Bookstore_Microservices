@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Eye, Calendar } from 'lucide-react';
 import {
   DataTable,
@@ -34,7 +34,14 @@ const OrderManagePage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const statusFilter = ORDER_STATUS_OPTIONS.find(option => option.value === searchParams.get('status'))?.value ?? 'all';
+  const setStatusFilter = status => setSearchParams(previous => {
+    const next = new URLSearchParams(previous);
+    if (status === 'all') next.delete('status');
+    else next.set('status', status);
+    return next;
+  }, { replace: true });
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 

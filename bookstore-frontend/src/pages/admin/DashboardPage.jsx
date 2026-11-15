@@ -5,6 +5,7 @@ import {
   ShoppingCart,
   AlertCircle,
   BookOpen,
+  Boxes,
   ArrowRight,
   RefreshCw,
   Calendar,
@@ -24,6 +25,10 @@ import { statsApi, orderApi, bookApi } from '../../api/services';
 import { formatPrice, formatDate } from '../../utils/formatters';
 
 const LOW_STOCK_THRESHOLD = 5;
+const REVENUE_PERIODS = [7, 14, 30];
+const number = new Intl.NumberFormat('vi-VN');
+const calendarDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' });
+const formatMetric = (value, unit) => value == null ? '—' : `${number.format(value)} ${unit}`;
 
 /**
  * DashboardPage Component
@@ -35,28 +40,34 @@ const DashboardPage = () => {
   const [lowStockBooks, setLowStockBooks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState({});
-  const [lastUpdated, setLastUpdated] = useState(new Date());
+  const [lastUpdated, setLastUpdated] = useState(() => new Date());
+  const [revenuePeriod, setRevenuePeriod] = useState(14);
 
   const fetchDashboardData = useCallback(async () => {
     try {
-      setLoading(true);
-
-      // Fetch all dashboard data in parallel
-      const [statsData, ordersData, inventoryData] = await Promise.all([
-        statsApi.getDashboardStats?.().catch(() => ({})) || {},
-        orderApi.getOrders?.({ limit: 5, status: 'PENDING' }).catch(() => []) || [],
-        bookApi.getLowStockBooks?.({ threshold: LOW_STOCK_THRESHOLD }).catch(() => []) || [],
+      const [statsResult, ordersResult, inventoryResult] = await Promise.allSettled([
+        statsApi.getDashboardStats(),
+        orderApi.getOrders({ limit: 5, status: 'PENDING' }),
+        bookApi.getLowStockBooks({ threshold: LOW_STOCK_THRESHOLD }),
       ]);
-
+      const statsData = statsResult.value;
+      const ordersData = ordersResult.value;
+      const inventoryData = inventoryResult.value;
       const unwrappedStats = statsData?.data || statsData || {};
       const lowStockList = Array.isArray(inventoryData) ? inventoryData : inventoryData?.data || [];
       const ordersList = Array.isArray(ordersData) ? ordersData : ordersData?.data || [];
 
-      // Map book covers for top books from lowStock list
       const rawTop = unwrappedStats.topProducts || unwrappedStats.topBooks || unwrappedStats.top_books || [];
-      const coverLookup = new Map(lowStockList.map((b) => [String(b.id), b.coverUrl || b.cover_url || b.image]));
+      const top = rawTop.slice(0, 5);
+      const missingCoverIds = top.filter(book => !book.coverUrl && !book.cover_url && !book.image)
+        .map(book => book.bookId ?? book.id)
+        .filter(id => Number.isSafeInteger(Number(id)) && Number(id) > 0);
+      const catalogBooks = await bookApi.getBooksByIds(missingCoverIds, { includeStock: false, timeout: 3500 })
+        .catch(() => []);
+      const coverLookup = new Map([...lowStockList, ...catalogBooks]
+        .map(book => [String(book.id), book.coverUrl || book.cover_url || book.image]));
 
-      const enrichedTop = rawTop.map((book) => {
+      const enrichedTop = top.map((book) => {
         const id = String(book.bookId || book.id);
         return {
           ...book,
@@ -69,12 +80,16 @@ const DashboardPage = () => {
       setStats({
         ...unwrappedStats,
         topProducts: enrichedTop,
-        low_stock_count: lowStockList.length,
+        low_stock_count: inventoryResult.status === 'fulfilled' ? lowStockList.length : null,
       });
       setRecentOrders(ordersList);
       setLowStockBooks(lowStockList);
       setLastUpdated(new Date());
-      setErrors({});
+      setErrors({
+        stats: statsResult.status === 'rejected' ? 'Chưa tải được số liệu thống kê.' : null,
+        orders: ordersResult.status === 'rejected' ? 'Chưa tải được đơn chờ xác nhận.' : null,
+        inventory: inventoryResult.status === 'rejected' ? 'Chưa tải được số liệu tồn kho.' : null,
+      });
     } catch (err) {
       console.error('Lỗi khi tải dữ liệu bảng điều khiển:', err);
       setErrors({ general: 'Không thể tải dữ liệu bảng điều khiển' });
@@ -84,37 +99,32 @@ const DashboardPage = () => {
   }, []);
 
   useEffect(() => {
-    fetchDashboardData();
+    const frame = requestAnimationFrame(fetchDashboardData);
+    return () => cancelAnimationFrame(frame);
   }, [fetchDashboardData]);
 
-  // Normalized values supporting both camelCase (mock / gateway) and snake_case (spring backend)
+  const refresh = () => {
+    setLoading(true);
+    fetchDashboardData();
+  };
+
   const monthlyRevenue =
     stats?.monthly_revenue ??
     stats?.monthlyRevenue ??
-    stats?.summary?.monthlyRevenue ??
-    stats?.totalRevenue ??
-    stats?.summary?.totalRevenue ??
-    0;
+    stats?.summary?.monthlyRevenue;
 
   const newOrdersCount =
-    stats?.new_orders_count ??
-    stats?.totalOrders ??
-    stats?.summary?.totalOrders ??
-    stats?.orders_count ??
-    0;
+    stats?.new_orders_count ?? stats?.newOrdersCount ?? stats?.summary?.newOrdersCount;
 
   const pendingOrdersCount =
     stats?.pending_orders_count ??
     stats?.pendingOrders ??
-    stats?.summary?.pendingOrders ??
-    recentOrders.filter((o) => o.status === 'PENDING').length;
+    stats?.summary?.pendingOrders;
 
   const lowStockCount =
     stats?.low_stock_count ??
-    stats?.summary?.lowStockCount ??
-    lowStockBooks.length;
+    stats?.summary?.lowStockCount;
 
-  // Build a strictly continuous 14-day timeline (no missing days or jump cuts)
   const rawRevenueData =
     stats?.revenue_data ||
     stats?.revenue30Days ||
@@ -132,149 +142,130 @@ const DashboardPage = () => {
     }
   });
 
-  const chartData = [];
-  for (let i = 13; i >= 0; i--) {
-    const d = new Date(Date.now() - i * 86400000);
-    const dateStr = d.toISOString().split('T')[0];
-    const dayStr = String(d.getDate()).padStart(2, '0');
-    const monthStr = String(d.getMonth() + 1).padStart(2, '0');
-    const displayDate = `${dayStr}/${monthStr}`;
-
+  const today = Date.parse(`${calendarDate.format(lastUpdated)}T00:00:00Z`);
+  const chartData = Array.from({ length: revenuePeriod }, (_, index) => {
+    const dateStr = new Date(today - (revenuePeriod - 1 - index) * 86400000).toISOString().slice(0, 10);
+    const [, month, day] = dateStr.split('-');
     const matched = revenueLookup.get(dateStr) || { revenue: 0, orders: 0 };
-    chartData.push({
-      date: dateStr,
-      displayDate,
+    return {
+      displayDate: `${day}/${month}`,
       fullDate: dateStr,
       revenue: matched.revenue,
       orders: matched.orders,
-    });
-  }
-
-  // Top books data normalization
-  const topBooksList =
-    stats?.topProducts ||
-    stats?.topBooks ||
-    stats?.top_books ||
-    [];
-
-  const topBooks = topBooksList.length > 0
-    ? topBooksList
-    : (lowStockBooks.length > 0
-        ? lowStockBooks.slice(0, 5).map((b, i) => ({
-            id: b.id,
-            title: b.title,
-            soldCount: 48 - i * 8,
-            price: b.price,
-            coverUrl: b.coverUrl || b.cover_url || b.image,
-          }))
-        : []);
+    };
+  });
+  const periodRevenue = chartData.reduce((total, day) => total + day.revenue, 0);
+  const topBooks = stats?.topProducts ?? [];
 
   // Clean KPI Cards without hardcoded fake percentages or placeholder texts
   const kpis = [
     {
-      title: 'Doanh thu tháng này',
-      value: formatPrice(monthlyRevenue),
-      icon: TrendingUp,
-      color: 'primary',
-      description: 'Đơn hàng đã hoàn thành',
-    },
-    {
-      title: 'Đơn hàng mới',
-      value: `${newOrdersCount.toLocaleString('vi-VN')} đơn`,
-      icon: ShoppingCart,
-      color: 'accent',
-      description: 'Đơn phát sinh trong tháng',
-    },
-    {
-      title: 'Đơn chờ duyệt',
-      value: `${pendingOrdersCount.toLocaleString('vi-VN')} đơn`,
+      title: 'Đơn chờ xác nhận',
+      value: formatMetric(pendingOrdersCount, 'đơn'),
       icon: AlertCircle,
-      color: 'warning',
-      description: 'Cần xác nhận và xuất kho',
+      to: '/admin/orders?status=PENDING',
+      description: 'Xem đơn chờ xác nhận',
     },
     {
-      title: 'Cảnh báo sắp hết hàng',
-      value: `${lowStockCount.toLocaleString('vi-VN')} sách`,
-      icon: BookOpen,
-      color: 'danger',
-      description: `Tồn kho ≤ ${LOW_STOCK_THRESHOLD} cuốn`,
+      title: 'Sách sắp hết',
+      value: formatMetric(lowStockCount, 'đầu sách'),
+      icon: Boxes,
+      to: '/admin/inventory?lowStock=true',
+      description: `Xem tồn kho ≤ ${LOW_STOCK_THRESHOLD} cuốn`,
+    },
+    {
+      title: 'Doanh thu tháng này',
+      value: monthlyRevenue == null ? '—' : formatPrice(monthlyRevenue),
+      icon: TrendingUp,
+      description: 'Từ các đơn đã thanh toán',
+    },
+    {
+      title: 'Đơn tháng này',
+      value: formatMetric(newOrdersCount, 'đơn'),
+      icon: ShoppingCart,
+      description: 'Tính từ đầu tháng',
     },
   ];
 
   if (errors.general) {
-    return <ErrorState message={errors.general} onRetry={fetchDashboardData} />;
+    return <ErrorState message={errors.general} onRetry={refresh} />;
   }
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
       {/* Header */}
       <PageHeader
-        title="Tổng quan hệ thống"
-        subtitle="Cổng quản trị hoạt động kinh doanh Nhà sách Phương Anh"
+        title="Tổng quan"
       />
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} type="rect" height="130px" />
           ))
         ) : (
-          kpis.map((kpi, i) => {
+          kpis.map(kpi => {
             const Icon = kpi.icon;
-            return (
-              <Card key={i} className="p-5 space-y-2 relative overflow-hidden group hover:shadow-md transition-shadow">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-caption text-ink-muted uppercase">
-                    {kpi.title}
-                  </h3>
-                  <div className={`p-2.5 rounded-card bg-${kpi.color}-light dark:bg-${kpi.color}-light/20 shadow-2xs`}>
-                    <Icon className={`w-5 h-5 text-${kpi.color} dark:text-${kpi.color}-light`} />
-                  </div>
+            const content = <>
+                <div className="flex items-start justify-between gap-2">
+                  <h3 className="text-sm font-medium text-ink">{kpi.title}</h3>
+                  <Icon size={18} className={kpi.to ? 'shrink-0 text-amber-800 dark:text-amber-300' : 'shrink-0 text-ink-muted'} aria-hidden="true" />
                 </div>
-
-                <div>
-                  <p className="text-display-sm font-bold text-ink dark:text-ink tracking-tight">
+                  <p className="mt-2 text-2xl font-bold tracking-tight text-ink tabular-nums">
                     {kpi.value}
                   </p>
-                  <p className="text-caption mt-1 text-ink-muted">
-                    {kpi.description}
+                  <p className="mt-1 flex items-center gap-1.5 text-sm text-ink-muted">
+                    {kpi.description}{kpi.to && <ArrowRight size={14} aria-hidden="true" />}
                   </p>
-                </div>
-              </Card>
-            );
+              </>;
+            return kpi.to
+              ? <Link key={kpi.title} to={kpi.to} className="block rounded-card border border-amber-200 bg-amber-50 p-4 transition-colors hover:bg-amber-100 dark:border-amber-900 dark:bg-warning-soft dark:hover:bg-amber-900/50">{content}</Link>
+              : <Card key={kpi.title} shadow="none" className="p-4">{content}</Card>;
           })
         )}
       </div>
 
       {/* Charts & Top Books */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-3">
         {/* Revenue Flat LineChart */}
-        <div className="lg:col-span-2">
+        <div className="min-w-0 xl:col-span-2">
           <ChartCard
-            title="Biểu đồ doanh thu (14 ngày liên tiếp gần nhất)"
+            title="Doanh thu"
+            actions={<div role="group" aria-label="Khoảng ngày doanh thu" className="inline-flex rounded-lg border border-border bg-paper p-0.5">
+              {REVENUE_PERIODS.map(days => <button key={days} type="button" aria-pressed={revenuePeriod === days}
+                onClick={() => setRevenuePeriod(days)}
+                className={`min-h-9 rounded-md px-2.5 text-xs font-semibold transition-colors ${revenuePeriod === days
+                  ? 'bg-primary text-white' : 'text-ink-muted hover:bg-surface-muted hover:text-ink'}`}>
+                {days} ngày
+              </button>)}
+            </div>}
             loading={loading}
-            error={errors.revenue}
-            empty={chartData.length === 0}
+            error={errors.stats}
+            onRetry={refresh}
           >
-            <div className="h-72 w-full pt-2">
+            <p className="text-xl font-bold tracking-tight text-ink tabular-nums">{formatPrice(periodRevenue)}</p>
+            <p className="mt-0.5 text-xs text-ink-muted">{revenuePeriod} ngày gần nhất</p>
+            <div className="h-48 w-full pt-3 sm:h-56">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart
                   data={chartData}
-                  margin={{ top: 12, right: 16, left: 10, bottom: 4 }}
+                  margin={{ top: 6, right: 10, left: 0, bottom: 0 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(140, 140, 140, 0.15)" />
                   <XAxis
                     dataKey="displayDate"
                     tickLine={false}
                     axisLine={{ stroke: 'rgba(140, 140, 140, 0.2)' }}
-                    tick={{ fill: '#71717a', fontSize: 12 }}
+                    tick={{ fill: 'var(--color-ink-muted)', fontSize: 11 }}
+                    minTickGap={24}
                   />
                   <YAxis
-                    width={70}
+                    width={55}
                     tickLine={false}
                     axisLine={false}
-                    tick={{ fill: '#71717a', fontSize: 12 }}
+                    tick={{ fill: 'var(--color-ink-muted)', fontSize: 11 }}
+                    tickCount={4}
                     tickFormatter={(val) => {
                       if (val >= 1000000) return `${(val / 1000000).toLocaleString('vi-VN')} Tr`;
                       if (val >= 1000) return `${(val / 1000).toLocaleString('vi-VN')} k`;
@@ -282,7 +273,7 @@ const DashboardPage = () => {
                     }}
                   />
                   <Tooltip
-                    content={({ active, payload, label }) => {
+                    content={({ active, payload }) => {
                       if (!active || !payload || !payload.length) return null;
                       const data = payload[0].payload;
                       return (
@@ -305,10 +296,10 @@ const DashboardPage = () => {
                   <Line
                     type="linear"
                     dataKey="revenue"
-                    stroke="#c2410c"
+                    stroke="var(--color-primary)"
                     strokeWidth={2.2}
-                    dot={{ r: 3.5, fill: '#c2410c', stroke: '#fff', strokeWidth: 1.5 }}
-                    activeDot={{ r: 5.5, fill: '#c2410c', stroke: '#fff', strokeWidth: 2 }}
+                    dot={false}
+                    activeDot={{ r: 5, fill: 'var(--color-primary)', stroke: 'var(--color-paper)', strokeWidth: 2 }}
                     name="Doanh thu"
                   />
                 </LineChart>
@@ -320,26 +311,20 @@ const DashboardPage = () => {
         {/* Top 5 Books */}
         <ChartCard
           title="Top 5 sách bán chạy"
+          actions={<span className="text-xs text-ink-muted">Lũy kế</span>}
           loading={loading}
-          error={errors.top_books}
+          error={errors.stats}
+          onRetry={refresh}
           empty={topBooks.length === 0}
         >
-          <div className="space-y-3">
+          <ol className="divide-y divide-border">
             {topBooks.slice(0, 5).map((book, i) => (
-              <div
+              <li
                 key={book.id || i}
-                className="flex items-center gap-3 p-2 hover:bg-surface-muted dark:hover:bg-surface rounded-card transition-colors border border-transparent hover:border-border"
+                className="flex min-h-12 items-center gap-3 py-2"
               >
                 <span
-                  className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-caption flex-shrink-0 shadow-2xs ${
-                    i === 0
-                      ? 'bg-amber-500 text-white'
-                      : i === 1
-                      ? 'bg-slate-400 text-white'
-                      : i === 2
-                      ? 'bg-amber-700 text-white'
-                      : 'bg-surface-muted text-ink-muted dark:text-ink'
-                  }`}
+                  className="w-5 shrink-0 text-center text-xs font-semibold text-ink-muted tabular-nums"
                 >
                   {i + 1}
                 </span>
@@ -347,49 +332,40 @@ const DashboardPage = () => {
                 {(book.coverUrl || book.cover_url || book.image) ? (
                   <img
                     src={book.coverUrl || book.cover_url || book.image}
-                    alt={book.title || book.name}
-                    className="w-8 h-11 object-cover rounded shadow-2xs border border-border flex-shrink-0"
+                    alt=""
+                    className="h-9 w-6 shrink-0 rounded object-contain"
                     loading="lazy"
+                    onError={event => { event.currentTarget.hidden = true; }}
                   />
-                ) : (
-                  <div className="w-8 h-11 rounded bg-surface-muted flex items-center justify-center text-ink-muted border border-border flex-shrink-0">
-                    <BookOpen size={14} />
-                  </div>
-                )}
+                ) : null}
 
                 <div className="flex-1 min-w-0">
-                  <p className="text-body-sm font-semibold text-ink dark:text-ink truncate" title={book.title || book.name}>
+                  <p className="line-clamp-2 text-sm font-medium text-ink" title={book.title || book.name}>
                     {book.title || book.name}
                   </p>
                   <p className="text-caption text-ink-muted">
-                    {book.soldCount || book.sold_count || 0} đã bán
+                    {number.format(book.soldCount ?? book.sold_count ?? 0)} cuốn đã bán
                   </p>
                 </div>
 
-                {book.price && (
-                  <span className="text-caption font-semibold text-ink flex-shrink-0">
-                    {formatPrice(book.price)}
-                  </span>
-                )}
-              </div>
+              </li>
             ))}
-          </div>
+          </ol>
         </ChartCard>
       </div>
 
       {/* Recent Orders & Low Stock */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Orders */}
-        <Card className="p-6 space-y-4">
+        <Card shadow="none" className="p-5 space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-bold text-heading-md text-ink dark:text-ink">
-                Đơn hàng gần đây
+                Đơn chờ xác nhận
               </h3>
-              <p className="text-caption text-ink-muted">Các đơn hàng mới hoặc đang chờ duyệt</p>
             </div>
             <Link
-              to="/admin/orders"
+              to="/admin/orders?status=PENDING"
               className="text-primary hover:text-primary-dark dark:text-primary-light text-body-sm font-semibold flex items-center gap-1 group"
             >
               <span>Xem tất cả</span>
@@ -399,6 +375,8 @@ const DashboardPage = () => {
 
           {loading ? (
             <Skeleton count={5} height="56px" />
+          ) : errors.orders ? (
+            <ErrorState message={errors.orders} onRetry={refresh} />
           ) : recentOrders.length > 0 ? (
             <div className="space-y-2.5">
               {recentOrders.map((order) => (
@@ -441,7 +419,7 @@ const DashboardPage = () => {
         </Card>
 
         {/* Low Stock Items */}
-        <Card className="p-6 space-y-4">
+        <Card shadow="none" className="p-5 space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-bold text-heading-md text-ink dark:text-ink">
@@ -450,7 +428,7 @@ const DashboardPage = () => {
               <p className="text-caption text-ink-muted">Sách sắp hết cần nhập bổ sung</p>
             </div>
             <Link
-              to="/admin/inventory"
+              to="/admin/inventory?lowStock=true"
               className="text-primary hover:text-primary-dark dark:text-primary-light text-body-sm font-semibold flex items-center gap-1 group"
             >
               <span>Kho hàng</span>
@@ -460,6 +438,8 @@ const DashboardPage = () => {
 
           {loading ? (
             <Skeleton count={5} height="56px" />
+          ) : errors.inventory ? (
+            <ErrorState message={errors.inventory} onRetry={refresh} />
           ) : lowStockBooks.length > 0 ? (
             <div className="space-y-2.5">
               {lowStockBooks.map((book) => (
@@ -493,7 +473,7 @@ const DashboardPage = () => {
                     </p>
                     <div className="flex items-center gap-2 flex-wrap text-caption">
                       <span className="inline-flex items-center px-2 py-0.5 rounded-badge text-caption font-bold bg-danger-soft text-danger">
-                        Chỉ còn {book.stock_quantity ?? book.stock ?? 0} cuốn
+                        {(book.stock_quantity ?? book.stock) === 0 ? 'Hết hàng' : `Còn ${book.stock_quantity ?? book.stock ?? '—'} cuốn`}
                       </span>
                       {book.price && (
                         <span className="text-ink-muted font-medium">
@@ -533,7 +513,8 @@ const DashboardPage = () => {
         <Button
           variant="secondary"
           size="sm"
-          onClick={fetchDashboardData}
+          onClick={refresh}
+          disabled={loading}
           className="flex items-center gap-2"
         >
           <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />

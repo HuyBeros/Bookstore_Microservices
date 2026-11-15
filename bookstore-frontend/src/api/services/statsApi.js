@@ -1,7 +1,7 @@
 import axiosClient from '../axiosClient';
 import { ENDPOINTS } from '../endpoints';
 import { makeRequest } from '../request';
-export const getDashboardStats = () => makeRequest('getDashboardStats', [], () => axiosClient.get(ENDPOINTS.STATS.DASHBOARD));
+export const getDashboardStats = (options) => makeRequest('getDashboardStats', [], () => axiosClient.get(ENDPOINTS.STATS.DASHBOARD, options));
 export const getStats = () => makeRequest('getStats', [], () => axiosClient.get(ENDPOINTS.STATS.OVERVIEW));
 export const getRevenue = () => getStats().then(res => ({ data: (res.data ?? res).revenueData ?? [] }));
 export const getTopBooks = () => getStats().then(res => ({ data: (res.data ?? res).topProducts ?? [] }));

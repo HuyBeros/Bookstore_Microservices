@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Link } from 'react-router-dom';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { mockApi } from '../src/mock/mockApi';
+import { makeCover } from '../src/mock/helpers';
 import ChatWidget from '../src/components/features/ChatWidget/ChatWidget';
 import '../src/index.css';
 
@@ -21,8 +22,9 @@ if (enabled) {
     if (mode === 'error') throw { status: 503 };
     if (mode === 'limit') throw { status: 429 };
     return { answer: 'Mình gợi ý bạn bắt đầu từ một cuốn sách phù hợp với sở thích.\nBạn có thể xem thông tin sách bên dưới.',
-      books: [{ id: 25, title: 'Cuốn sách dành cho bạn', price: 70000, stock: 1 },
-        { id: 26, title: 'Một câu chuyện để khám phá', price: 85000, stock: null }],
+      books: [{ id: 25, title: 'Cuốn sách dành cho bạn', price: 70000, stock: 1, coverUrl: makeCover('Cuốn sách dành cho bạn') },
+        { id: 26, title: 'Một câu chuyện để khám phá', price: 85000, stock: null },
+        { id: 27, title: 'Những trang sách mùa thu', price: 92000, stock: 0, coverUrl: '/tests/missing-cover.png' }],
       sources: [{ bookId: 25, title: 'Cuốn sách dành cho bạn', url: '/books/25' },
         { bookId: 26, title: 'Một câu chuyện để khám phá', url: '/books/26' }],
       notices: ['Chưa xác minh được tồn kho của một số sách. Vui lòng kiểm tra tại trang sách.'],

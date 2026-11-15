@@ -10,6 +10,10 @@ export const calculateStats = (orders = initialOrders, books = initialBooks) => 
   const totalOrders = orders.length;
   const completedOrders = deliveredOrders.length;
   const pendingOrders = orders.filter((o) => o.status === 'PENDING').length;
+  const month = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date()).slice(0, 7);
+  const monthlyRevenue = deliveredOrders.filter(order => order.created_at?.startsWith(month))
+    .reduce((sum, order) => sum + (order.total_amount || 0), 0);
+  const newOrdersCount = orders.filter(order => order.created_at?.startsWith(month)).length;
   const lowStockBooks = books.filter((b) => b.stock <= 5);
 
   // Doanh thu theo 30 ngày gần đây
@@ -54,7 +58,8 @@ export const calculateStats = (orders = initialOrders, books = initialBooks) => 
   return {
     summary: {
       totalRevenue,
-      monthlyRevenue: Math.round(totalRevenue * 0.45),
+      monthlyRevenue,
+      newOrdersCount,
       totalOrders,
       completedOrders,
       pendingOrders,

@@ -86,6 +86,42 @@ test('normalizers preserve order price, stock identifiers and payment status', (
   assert.equal(mapCart({ items: [] }).items.length, 0);
 });
 
+test('admin briefing falls back to dashboard data when the running AI service lacks the route', async () => {
+  const { api, calls } = await apiHarness('aiApi', (_method, [path]) => {
+    if (path === '/ai/admin/briefing') throw { status: 404 };
+    if (path === '/stats/dashboard') return { pending_orders_count: 2 };
+    if (path === '/inventory/low-stock') return [{ bookId: 2, quantity: 5 }, { bookId: 1, quantity: 0 }];
+    if (path === '/catalog/books/batch') return [{ id: 2, title: 'Sách B' }, { id: 1, title: 'Sách A' }];
+    throw new Error('Unexpected request');
+  });
+  const result = await api.getAdminBriefing();
+  assert.equal(result.pendingOrders, 2);
+  assert.equal(result.lowStockCount, 2);
+  assert.deepEqual(result.lowStockBooks.map(book => book.quantity), [0, 5]);
+  assert.equal(result.aiAssisted, false);
+  assert.equal(calls[0].method, 'post');
+});
+
+test('admin briefing preserves an access denial without querying dashboard sources', async () => {
+  const { api, calls } = await apiHarness('aiApi', () => { throw { status: 403 }; });
+  await assert.rejects(api.getAdminBriefing(), { status: 403 });
+  assert.equal(calls.length, 1);
+});
+
+test('catalog price ranking requests only the sorted first page without depending on inventory', async () => {
+  const { api, calls } = await apiHarness('bookApi', {
+    content: [{ id: 7, title: 'Sách A', price: '240000' }],
+    totalElements: 1,
+  });
+  const result = await api.getBooks({ sort: 'price_desc', limit: 5 }, { includeStock: false });
+  assert.equal(result.data[0].price, 240000);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].args[0], '/catalog/books');
+  assert.equal(calls[0].args[1].params.sort, 'price-desc');
+  assert.equal(calls[0].args[1].params.size, 5);
+  assert.equal(calls[0].args[1].params.page, 0);
+});
+
 test('public bestsellers preserve sales ranking while hydrating current catalog price and stock', async () => {
   const { api, calls } = await apiHarness('bookApi', (_method, args) => {
     if (args[0] === '/orders/bestsellers') return [{ bookId: 22, soldCount: 8 }, { bookId: 11, soldCount: 3 }, { bookId: 99, soldCount: 1 }];

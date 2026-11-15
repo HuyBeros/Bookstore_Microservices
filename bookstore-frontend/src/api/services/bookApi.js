@@ -38,10 +38,10 @@ const withStock = async (books, options = {}) => {
     stock_quantity: quantities.get(String(book.id)) ?? 0 }));
 };
 
-export const getBooksByIds = async (ids, options = {}) => {
+export const getBooksByIds = async (ids, { includeStock = true, ...options } = {}) => {
   if (!ids.length) return [];
   const books = await axiosClient.get('/catalog/books/batch', { ...options, params: { ids: [...new Set(ids)].join(',') } });
-  return withStock(books, options);
+  return includeStock ? withStock(books, options) : books.map(mapBook);
 };
 
 export const getBestsellers = async ({ limit = 12 } = {}, options = {}) => {
@@ -53,8 +53,9 @@ export const getBestsellers = async ({ limit = 12 } = {}, options = {}) => {
   })) };
 };
 
-export const getBooks = (params = {}, options = {}) => {
+export const getBooks = (params = {}, { includeStock = true, ...options } = {}) => {
   return makeRequest('getBooks', [params], async () => {
+    const normalize = books => includeStock ? withStock(books, options) : books.map(mapBook);
     const p = catalogFilterParams(params);
     if (params.sort) p.sort = ({ price_asc: 'price-asc', price_desc: 'price-desc' })[params.sort] ?? params.sort;
     p.size = params.size || params.limit || 20;
@@ -66,7 +67,7 @@ export const getBooks = (params = {}, options = {}) => {
     // Spring PageResponse normalization
     if (res && Array.isArray(res.content)) {
       return {
-        data: await withStock(res.content, options),
+        data: await normalize(res.content),
         total: res.totalElements,
         page: (res.page !== undefined ? res.page : p.page) + 1,
         size: res.size,
@@ -74,10 +75,10 @@ export const getBooks = (params = {}, options = {}) => {
       };
     }
     if (Array.isArray(res)) {
-      return { data: await withStock(res, options), total: res.length };
+      return { data: await normalize(res), total: res.length };
     }
     if (res?.data && Array.isArray(res.data)) {
-      return { ...res, data: await withStock(res.data, options) };
+      return { ...res, data: await normalize(res.data) };
     }
     return res;
   });
@@ -113,12 +114,12 @@ export const deleteBook = (id) => {
   );
 };
 
-export const getLowStockBooks = (params = {}) => {
+export const getLowStockBooks = (params = {}, options = {}) => {
   return makeRequest('getLowStockBooks', [params], async () => {
-    const res = await axiosClient.get('/inventory/low-stock', { params });
+    const res = await axiosClient.get('/inventory/low-stock', { ...options, params });
     const list = res?.content || res?.data || res;
     if (!Array.isArray(list) || !list.length) return [];
-    const books = await axiosClient.get('/catalog/books/batch', { params: { ids: list.map(s => s.bookId).join(',') } });
+    const books = await axiosClient.get('/catalog/books/batch', { ...options, params: { ids: list.map(s => s.bookId).join(',') } });
     const quantities = new Map(list.map(s => [String(s.bookId), s.quantity]));
     return books.map(book => mapBook({ ...book, stock_quantity: quantities.get(String(book.id)) }));
   });

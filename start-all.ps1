@@ -15,7 +15,7 @@ Get-Content -LiteralPath '.env' | ForEach-Object {
     if ($_ -match '^\s*([A-Z][A-Z0-9_]*)\s*=(.*)$') {
         $key = $matches[1]
         $value = $matches[2].Trim().Trim('"').Trim("'")
-        if ($key -match '^(DB_|JWT_|ADMIN_|EUREKA_|CATALOG_|INVENTORY_|AI_|GEMINI_|REDIS_|CORS_|SWAGGER_|SPRING_PROFILES_ACTIVE$|PGADMIN_)') {
+        if ($key -match '^(DB_|JWT_|ADMIN_|EUREKA_|CATALOG_|INVENTORY_|ORDER_|AI_|GEMINI_|REDIS_|CORS_|SWAGGER_|SPRING_PROFILES_ACTIVE$|PGADMIN_)') {
             if (-not [Environment]::GetEnvironmentVariable($key, 'Process')) { [Environment]::SetEnvironmentVariable($key, $value, 'Process') }
         }
     }

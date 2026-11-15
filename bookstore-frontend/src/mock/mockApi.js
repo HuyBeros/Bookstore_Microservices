@@ -631,6 +631,11 @@ export const mockApi = {
     return { data: db.books, items: db.books };
   },
 
+  async getLowStockBooks({ threshold = 5 } = {}) {
+    const { data } = await this.getInventory();
+    return data.filter(book => book.stock <= threshold).sort((left, right) => left.stock - right.stock);
+  },
+
   async importStock(data) {
     await delay();
     const db = getDb();

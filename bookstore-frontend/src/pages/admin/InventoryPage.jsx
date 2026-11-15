@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Button,
   DataTable,
@@ -26,15 +27,38 @@ const InventoryPage = () => {
   const { showToast } = useToast();
   const [books, setBooks] = useState([]);
   const [lowStockBooks, setLowStockBooks] = useState([]);
-  const [totalCatalogCount, setTotalCatalogCount] = useState(500);
+  const [totalCatalogCount, setTotalCatalogCount] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterLowStock, setFilterLowStock] = useState(false);
-  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filterLowStock = searchParams.get('lowStock') === 'true';
+  const setFilterLowStock = enabled => setSearchParams(previous => {
+    const next = new URLSearchParams(previous);
+    if (enabled) next.set('lowStock', 'true');
+    else next.delete('lowStock');
+    return next;
+  }, { replace: true });
   const [selectedBook, setSelectedBook] = useState(null);
   const [importQuantity, setImportQuantity] = useState('');
   const [importing, setImporting] = useState(false);
+  const quantityToImport = Number(importQuantity);
+  const validImportQuantity = Number.isSafeInteger(quantityToImport) && quantityToImport > 0;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const { signal } = controller;
+
+    bookApi.getBooks({ limit: 1 }, { includeStock: false, signal })
+      .then(({ total }) => {
+        if (!signal.aborted) setTotalCatalogCount(total);
+      })
+      .catch(err => {
+        if (!signal.aborted) console.error('Lỗi khi tải tổng đầu sách:', err);
+      });
+
+    return () => controller.abort();
+  }, []);
 
   // Fetch low stock list once for metric sync
   useEffect(() => {
@@ -73,7 +97,6 @@ const InventoryPage = () => {
           const data = await bookApi.getBooks(params);
           const list = Array.isArray(data) ? data : data?.data || data?.content || [];
           setBooks(list);
-          if (data?.totalElements) setTotalCatalogCount(data.totalElements);
         }
         setError(null);
       } catch (err) {
@@ -88,43 +111,37 @@ const InventoryPage = () => {
     return () => clearTimeout(timer);
   }, [searchTerm, filterLowStock]);
 
-  const handleImport = async () => {
-    if (!selectedBook || !importQuantity || parseInt(importQuantity) <= 0) {
-      showToast('error', 'Vui lòng nhập số lượng hợp lệ lớn hơn 0');
-      return;
-    }
+  const resetImport = () => {
+    setSelectedBook(null);
+    setImportQuantity('');
+  };
+
+  const handleImport = async (event) => {
+    event.preventDefault();
+    if (importing || !selectedBook || !validImportQuantity) return;
 
     try {
       setImporting(true);
-      const qty = parseInt(importQuantity);
       const updated = await inventoryApi.importStock({
-        book_id: selectedBook.id,
-        quantity: qty,
+        bookId: selectedBook.id,
+        quantity: quantityToImport,
         note: 'Nhập kho thủ công',
       });
 
-      const newQty = updated?.quantity ?? ((selectedBook.stock_quantity ?? selectedBook.stock ?? 0) + qty);
+      const newQty = updated?.quantity ?? updated?.data?.stock_quantity
+        ?? ((selectedBook.stock_quantity ?? selectedBook.stock ?? 0) + quantityToImport);
+      const updateStock = (book) => book.id === selectedBook.id
+        ? { ...book, stock_quantity: newQty, stock: newQty }
+        : book;
+      const isLowStock = (book) => (book.stock_quantity ?? book.stock ?? 0) <= LOW_STOCK_THRESHOLD;
+      setBooks(previous => {
+        const next = previous.map(updateStock);
+        return filterLowStock ? next.filter(isLowStock) : next;
+      });
+      setLowStockBooks(previous => previous.map(updateStock).filter(isLowStock));
 
-      // Update local state
-      setBooks(
-        books.map((b) =>
-          b.id === selectedBook.id
-            ? { ...b, stock_quantity: newQty, stock: newQty }
-            : b
-        )
-      );
-
-      // Update lowStock list
-      setLowStockBooks((prev) =>
-        prev
-          .map((b) => (b.id === selectedBook.id ? { ...b, stock_quantity: newQty, stock: newQty } : b))
-          .filter((b) => (b.stock_quantity ?? b.stock ?? 0) <= LOW_STOCK_THRESHOLD)
-      );
-
-      showToast('success', `Đã nhập thêm ${qty} cuốn cho sách "${selectedBook.title}"`);
-      setImportModalOpen(false);
-      setImportQuantity('');
-      setSelectedBook(null);
+      showToast('success', `Đã nhập thêm ${quantityToImport} cuốn cho sách "${selectedBook.title}"`);
+      resetImport();
     } catch (err) {
       showToast('error', err.message || 'Không thể thực hiện nhập kho');
     } finally {
@@ -187,7 +204,7 @@ const InventoryPage = () => {
     },
     {
       header: 'Tổng giá trị tồn',
-      accessor: 'id',
+      accessor: 'stockValue',
       render: (row) => {
         const qty = row.stock_quantity ?? row.stock ?? 0;
         return (
@@ -199,15 +216,12 @@ const InventoryPage = () => {
     },
     {
       header: 'Thao tác',
-      accessor: 'id',
+      accessor: 'actions',
       render: (row) => (
         <Button
           variant="secondary"
           size="sm"
-          onClick={() => {
-            setSelectedBook(row);
-            setImportModalOpen(true);
-          }}
+          onClick={() => setSelectedBook(row)}
         >
           Nhập kho
         </Button>
@@ -230,7 +244,7 @@ const InventoryPage = () => {
         <Card className="p-5 space-y-1.5 shadow-2xs">
           <p className="text-caption font-semibold text-ink-muted uppercase">Tổng đầu sách</p>
           <p className="text-display-sm font-bold text-ink dark:text-ink">
-            {totalCatalogCount}
+            {totalCatalogCount ?? '—'}
           </p>
         </Card>
         <Card className="p-5 space-y-1.5 shadow-2xs border-warning/20">
@@ -283,16 +297,14 @@ const InventoryPage = () => {
       )}
 
       {/* Import Modal */}
-      {importModalOpen && selectedBook && (
+      {selectedBook && (
         <Modal
+          isOpen
           title={`Nhập hàng: ${selectedBook.title}`}
-          onClose={() => {
-            setImportModalOpen(false);
-            setSelectedBook(null);
-            setImportQuantity('');
-          }}
+          onClose={importing ? undefined : resetImport}
+          closeButton={!importing}
         >
-          <div className="space-y-4">
+          <form className="space-y-4" onSubmit={handleImport}>
             <div className="p-3 bg-surface-muted rounded-card flex items-center justify-between">
               <div>
                 <p className="text-body-sm font-semibold text-ink">{selectedBook.title}</p>
@@ -305,9 +317,13 @@ const InventoryPage = () => {
               <Input
                 type="number"
                 min="1"
+                step="1"
+                required
+                aria-label="Số lượng nhập thêm"
                 placeholder="Ví dụ: 20"
                 value={importQuantity}
                 onChange={(e) => setImportQuantity(e.target.value)}
+                disabled={importing}
                 autoFocus
               />
             </FormField>
@@ -315,24 +331,21 @@ const InventoryPage = () => {
             <div className="flex justify-end gap-3 pt-3">
               <Button
                 variant="secondary"
-                onClick={() => {
-                  setImportModalOpen(false);
-                  setSelectedBook(null);
-                  setImportQuantity('');
-                }}
+                onClick={resetImport}
+                disabled={importing}
               >
                 Hủy
               </Button>
               <Button
+                type="submit"
                 variant="primary"
-                onClick={handleImport}
                 loading={importing}
-                disabled={!importQuantity || parseInt(importQuantity) <= 0}
+                disabled={!validImportQuantity}
               >
                 Xác nhận nhập kho
               </Button>
             </div>
-          </div>
+          </form>
         </Modal>
       )}
     </div>

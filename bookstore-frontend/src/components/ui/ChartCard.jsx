@@ -1,4 +1,3 @@
-import React from 'react';
 import Card from './Card';
 import Skeleton from './Skeleton';
 import EmptyState from './EmptyState';
@@ -10,6 +9,7 @@ import ErrorState from './ErrorState';
  */
 const ChartCard = ({
   title,
+  actions,
   children,
   loading = false,
   error = null,
@@ -18,17 +18,18 @@ const ChartCard = ({
   className = '',
 }) => {
   return (
-    <Card className={`p-6 ${className}`.trim()}>
+    <Card shadow="none" className={`p-5 sm:p-6 ${className}`.trim()}>
       {title && (
-        <h3 className="text-heading-md font-semibold text-ink dark:text-ink mb-4">
-          {title}
-        </h3>
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <h3 className="text-heading-md font-semibold text-ink">{title}</h3>
+          {actions}
+        </div>
       )}
 
-      {loading && <Skeleton count={3} height="12rem" />}
-      {error && <ErrorState message={error} onRetry={onRetry} />}
-      {empty && <EmptyState title="Chưa có dữ liệu" />}
-      {!loading && !error && !empty && children}
+      {loading ? <Skeleton height="13rem" />
+        : error ? <ErrorState message={error} onRetry={onRetry} />
+        : empty ? <EmptyState title="Chưa có dữ liệu" />
+        : children}
     </Card>
   );
 };
